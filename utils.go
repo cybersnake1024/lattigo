@@ -1,4 +1,4 @@
-package utils
+package lattigo
 
 import (
 	"github.com/tuneinsight/lattigo/v4/ckks"
