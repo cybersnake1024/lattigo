@@ -2,6 +2,10 @@
 
 This is the code for protecting privacy using single-party and multi-party homomorphic encryption via Lattigo Library.
 
+The proprocessed data has been put into the example\dataset folder.
+
+The code is running on Windows platform, and not tested on Linux or Mac.
+
 ### Testing performance among different block size choices
 ```bash
 $ go run .\blocksize_choices\test_blocks.go
