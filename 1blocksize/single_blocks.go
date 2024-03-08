@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	utils "lattigo"
 	"math"
 	"math/rand"
 	"os"
@@ -96,9 +97,9 @@ const WATER_TRANSITION_EQUALITY_THRESHOLD = 100
 const ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD = 2
 
 var sectionSize int // element number within a section
-var MAX_PARTY_ROWS = 32768
-var maxHouseholdsNumber = 1 //const to 1 with 32768 records for testing block sizes
-var NGoRoutine int = 1      // Default number of Go routines
+var MAX_PARTY_ROWS = 10240
+var maxHouseholdsNumber = 80
+var NGoRoutine int = 1 // Default number of Go routines
 var encryptedSectionNum int
 var globalPartyRows = -1
 var performanceLoops = 1
@@ -106,7 +107,7 @@ var currentDataset = 1  //water(1),electricity(2)
 var currentStrategy = 1 //Global(1), Household(2), Random(3)
 var transitionEqualityThreshold int
 var sectionNum int
-var paramsDefs = []ckks.ParametersLiteral{ckks.PN10QP27CI, ckks.PN11QP54CI, ckks.PN12QP109CI, ckks.PN13QP218CI, ckks.PN14QP438CI, ckks.PN15QP880CI} //, ckks.PN16QP1761CI
+var paramsDefs = []ckks.ParametersLiteral{utils.PN10QP27CI, utils.PN11QP54CI, ckks.PN12QP109CI, ckks.PN13QP218CI, ckks.PN14QP438CI, ckks.PN15QP880CI} //, ckks.PN16QP1761CI
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
@@ -118,6 +119,7 @@ func main() {
 		fmt.Println("Error getting current working directory:", err)
 		return
 	}
+	// fmt.Println(wd)
 
 	var pathFormat string
 	if strings.Contains(wd, "examples") {
@@ -127,23 +129,25 @@ func main() {
 	}
 	var path string
 	if currentDataset == DATASET_WATER {
-		path = fmt.Sprintf(pathFormat, "water")
+		path = fmt.Sprintf(pathFormat, "water", MAX_PARTY_ROWS)
 		transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
 	} else { //electricity
-		path = fmt.Sprintf(pathFormat, "electricity")
+		path = fmt.Sprintf(pathFormat, "electricity", MAX_PARTY_ROWS)
 		transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
 	}
 
 	// Construct the file path relative to the working directory
 	folder := filepath.Join(wd, path)
 	fileList := []string{}
+	// fmt.Println(folder)
+
 	err = filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println(err)
 			return err
 		}
 		if !info.IsDir() {
-			fmt.Printf("***********path: %s\n", path)
+			// fmt.Printf("***********path: %s\n", path)
 			fileList = append(fileList, path)
 		}
 		return nil
@@ -152,7 +156,7 @@ func main() {
 		fmt.Println(err)
 	}
 
-	for sectionSize = 1024; sectionSize <= 32768; sectionSize *= 2 {
+	for sectionSize = 1024; sectionSize <= 8192; sectionSize *= 2 {
 		var paramsDef = paramsDefs[int(math.Log2(float64(sectionSize/1024)))]
 		params, err := ckks.NewParametersFromLiteral(paramsDef)
 		check(err)
@@ -161,7 +165,7 @@ func main() {
 		}
 		fmt.Println("-------------------------->")
 		fmt.Printf("SectionSize = %d\n", sectionSize)
-		process(fileList[:maxHouseholdsNumber], params)
+		process(fileList[:maxHouseholdsNumber/(sectionSize/1024)], params)
 	}
 
 	fmt.Printf("Main() Done in %s \n", time.Since(start))
@@ -346,29 +350,8 @@ func markEncryptedSectionsByHousehold(en int, P []*party, entropySum float64, tr
 
 func showHomomorphicMeasure(loop int, params ckks.Parameters) {
 
-	fmt.Println("1====")
 	fmt.Printf("***** Evaluating Summation time for %d households in thirdparty analyst's side: %s\n", maxHouseholdsNumber, time.Duration(elapsedSummation.Nanoseconds()/int64(loop)))
 	fmt.Printf("***** Evaluating Deviation time for %d households in thirdparty analyst's side: %s\n", maxHouseholdsNumber, time.Duration(elapsedDeviation.Nanoseconds()/int64(loop)))
-
-	// fmt.Println("2====")
-
-	//public key & relinearization key & rotation key
-	// fmt.Printf("*****Amortized SKG Time: %s\n", time.Duration(elapsedSKGParty.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized PKG Time: %s\n", time.Duration(elapsedPKGParty.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized RKG Time: %s\n", time.Duration(elapsedRKGParty.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized RTG Time: %s\n", time.Duration(elapsedRTGParty.Nanoseconds()/int64(loop)))
-
-	// //single operation, independent of households' size
-	// fmt.Printf("*****Amortized Encrypt Time: %s\n", time.Duration(elapsedEncryptParty.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized Decrypt Time: %s\n", time.Duration(elapsedDecParty.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized Ciphertext Addition Time: %s\n", time.Duration(elapsedAddition.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized Ciphertext Multiplication Time: %s\n", time.Duration(elapsedMultiplication.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized Ciphertext Rotation Time: %s\n", time.Duration(elapsedRotation.Nanoseconds()/int64(loop*len(params.GaloisElementsForRowInnerSum()))))
-
-	// fmt.Printf("*****Amortized Analyst Time: %s\n", time.Duration(elapsedAnalystSummation.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized Analyst Time: %s\n", time.Duration(elapsedAnalystVariance.Nanoseconds()/int64(loop)))
-
-	// PrintMemUsage()
 }
 
 func doHomomorphicOperations(params ckks.Parameters, P []*party, expSummation, expAverage, expDeviation, plainSum []float64) {
@@ -466,18 +449,12 @@ func doHomomorphicOperations(params ckks.Parameters, P []*party, expSummation, e
 	} //i
 	elapsedAnalystVariance += time.Since(anaTime2)
 
-	// Decrypt & Print====================================================
-	// fmt.Println("> Decrypt & Result:>>>>>>>>>>>>>")
-
-	// print summation
+	// Decrypt & Print
 	ptresSummation := ckks.NewPlaintext(params, params.MaxLevel())
 	for i, _ := range encSummationOuts {
 		if encSummationOuts[i] != nil {
 			decryptor.Decrypt(encSummationOuts[i], ptresSummation) //ciphertext->plaintext
 			encoder.Decode(ptresSummation, params.LogSlots())      //resSummation :=
-			// fmt.Printf("CKKS Summation of Party[%d]=%.6f\t", i, real(resSummation[0])+plainSum[i])
-			// fmt.Printf(" <===> Expected Summation of Party[%d]=%.6f\t", i, expSummation[i])
-			// fmt.Println()
 		}
 	}
 
@@ -492,39 +469,8 @@ func doHomomorphicOperations(params ckks.Parameters, P []*party, expSummation, e
 
 			// res := encoder.Decode(ptres, params.LogSlots())
 			encoder.Decode(ptresDeviation, params.LogSlots()) //resDeviation :=
-
-			// calculatedAverage := real(res[0])
-			// calculatedAverage := expAverage[i]
-
-			// fmt.Printf("CKKS Average of Party[%d]=%.6f\t", i, calculatedAverage)
-			// fmt.Printf(" <===> Expected Average of Party[%d]=%.6f\t", i, expAverage[i])
-			// fmt.Println()
-
-			//extra value for deviation
-			// delta := calculatedAverage * calculatedAverage * float64(len(resDeviation)-globalPartyRows) / float64(globalPartyRows)
-
-			// fmt.Printf("CKKS Deviation of Party[%d]=%.6f\t", i, real(resDeviation[0])) //real(resDeviation[0])-delta
-			// fmt.Printf(" <===> Expected Deviation of Party[%d]=%.6f\t", i, expDeviation[i])
-			// fmt.Println()
 		}
 	}
-	// fmt.Printf("\tDecrypt Time: done %s\n", elapsedDecParty)
-	// fmt.Println()
-
-	//print result
-	// visibleNum := 4
-	// fmt.Println("> Parties:")
-	//original data
-	// for i, pi := range P {
-	// 	fmt.Printf("Party %3d(%d):\t\t", i, len(pi.input))
-	// 	for j, element := range pi.input {
-	// 		if j < visibleNum || (j > globalPartyRows-visibleNum && j < globalPartyRows) {
-	// 			fmt.Printf("[%d]%.6f\t", j, element)
-	// 		}
-	// 	}
-	// 	fmt.Println()
-	// }
-
 }
 
 func encPhase(params ckks.Parameters, P []*party, pk *rlwe.PublicKey, encoder ckks.Encoder) (encInputsSummation, encInputsNegative [][]*rlwe.Ciphertext) {
@@ -533,7 +479,6 @@ func encPhase(params ckks.Parameters, P []*party, pk *rlwe.PublicKey, encoder ck
 	encInputsNegative = make([][]*rlwe.Ciphertext, len(P))
 
 	// Each party encrypts its input vector
-	// fmt.Println("> Encrypt Phase<<<<<<<<<<<<<<<<<<")
 	encryptor := ckks.NewEncryptor(params, pk)
 	pt := ckks.NewPlaintext(params, params.MaxLevel())
 
@@ -565,10 +510,9 @@ func encPhase(params ckks.Parameters, P []*party, pk *rlwe.PublicKey, encoder ck
 				}
 			}
 		}
-	}, 2*len(P)) //2 encryption in function
+	}, 2*len(P)) //encryption in function
 
 	// fmt.Printf("\tdone  %s\n", elapsedEncryptParty)
-
 	return
 }
 
@@ -590,16 +534,11 @@ func genparties(params ckks.Parameters, fileList []string) []*party {
 
 //file reading
 func ReadCSV(path string) []string {
-	// fmt.Println("reading without buffer:")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Println("data:", string(data))
 	dArray := strings.Split(string(data), "\n")
-	// fmt.Println("original CSV size:", len(dArray))
-	// dArray2 := dArray[1 : len(dArray)-1]
-	// fmt.Println("data CSV size:", len(dArray)) //[0]..[241919]
 	return dArray[:len(dArray)-1]
 }
 
@@ -684,7 +623,6 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 				po.entropy[i/sectionSize] = entropyVal
 				tmpStr = ""
 				entropySum += entropyVal
-				// fmt.Printf("po.entropy[%d] = %.6f\n", i/sectionSize, po.entropy[i/sectionSize])
 			}
 		} //each line
 

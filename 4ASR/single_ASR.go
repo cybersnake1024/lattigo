@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	utils "lattigo"
 	"math"
 	"math/rand"
 	"os"
@@ -151,7 +152,7 @@ func main() {
 	start := time.Now()
 	fileList := []string{}
 	var err error
-	paramsDef := ckks.PN10QP27CI
+	paramsDef := utils.PN10QP27CI
 	params, err := ckks.NewParametersFromLiteral(paramsDef)
 	check(err)
 	if err != nil {

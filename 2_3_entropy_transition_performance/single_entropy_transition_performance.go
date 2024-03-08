@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	utils "lattigo"
 	"math"
 	"math/rand"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/tuneinsight/lattigo/v4/ckks"
 	"github.com/tuneinsight/lattigo/v4/drlwe"
 	"github.com/tuneinsight/lattigo/v4/rlwe"
+	"github.com/tuneinsight/lattigo/v4/utils"
 )
 
 func almostEqual(a, b float64) bool {
@@ -165,7 +167,7 @@ func main() {
 
 	fileList := []string{}
 	var err error
-	paramsDef := ckks.PN10QP27CI // PN10QP27CI, PN11QP54CI for summation correctness, PN13QP218CI for variance correctness
+	paramsDef := utils.PN10QP27CI
 	params, err := ckks.NewParametersFromLiteral(paramsDef)
 	check(err)
 	if err != nil {
