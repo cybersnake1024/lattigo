@@ -1,3 +1,7 @@
+/**
+running command: // strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
+go run .\asr\test_asr.go 1 2 0 1 60 80
+*/
 package main
 
 import (
@@ -81,8 +85,10 @@ const ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD = 2
 
 var atdSize = 24 // element number of unique attacker data
 var min_percent_matched = 100
-var max_attackLoop = 2000
+var max_attackLoop = 1000
+
 var maxHouseholdsNumber = 80
+
 var NGoRoutine int = 1 // Default number of Go routines
 var encryptedSectionNum int
 var globalPartyRows = -1
@@ -92,14 +98,19 @@ var currentStrategy int = 1 //Global(1), Household(2), Random(3)
 var currentDataset int = 1  //water(1),electricity(2)
 var uniqueATD int = 0       // unique attacker data, 1 for true, 0 for false
 var currentTarget = 2       //entropy(1),transition(2)
+var encryptionRatio int
 
 var transitionEqualityThreshold int
 var sectionNum int
 var usedRandomStartPartyPairs = map[int][]int{}
 var usedHouses = map[int]int{}
+var house_sample = []float64{}
+
+var elapsedTime time.Duration
 
 func main() {
 	var args []int
+	var err error
 
 	for _, arg := range os.Args[1:] {
 		num, err := strconv.Atoi(arg)
@@ -111,11 +122,29 @@ func main() {
 	}
 
 	if len(args) > 0 {
-		currentStrategy = args[0] //Global(1), Household(2), Random(3)
-		currentDataset = args[1]  //water(1),electricity(2)
-		uniqueATD = args[2]       // unique attacker data, 1 for true, 0 for false
-		currentTarget = args[3]   //entropy(1),transition(2)
+		currentStrategy = args[0]
+		currentDataset = args[1]
+		uniqueATD = args[2]
+		currentTarget = args[3]
+		encryptionRatio = args[4]
+		maxHouseholdsNumber = args[5]
 	}
+
+	//write to file
+	str := "asr_entended_time"
+	fileName := fmt.Sprintf("%s_%d_%d_%d_%d.txt", str, currentDataset, currentTarget, encryptionRatio, maxHouseholdsNumber)
+
+	file, err := os.Create(fileName)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
+
+	originalOutput := os.Stdout
+	defer func() { os.Stdout = originalOutput }()
+	os.Stdout = file
+	//write to file
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 	if currentStrategy == STRATEGY_GLOBAL {
@@ -145,13 +174,14 @@ func main() {
 	fmt.Println("Max Attack Loop: ", max_attackLoop)
 	fmt.Println("ATD Size: ", atdSize)
 	fmt.Println("Number of Households: ", maxHouseholdsNumber)
+	fmt.Println("Encryption ratio: ", encryptionRatio, "%")
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
 	rand.Seed(time.Now().UnixNano())
 	start := time.Now()
 	fileList := []string{}
-	var err error
+
 	paramsDef := utils.PN10QP27CI
 	params, err := ckks.NewParametersFromLiteral(paramsDef)
 	check(err)
@@ -166,7 +196,6 @@ func main() {
 	}
 	var pathFormat string
 	var path string
-
 	if strings.Contains(wd, "examples") {
 		pathFormat = filepath.Join("..", "..", "..", "examples", "datasets", "%s", "households_%d")
 	} else {
@@ -181,6 +210,10 @@ func main() {
 	}
 
 	folder := filepath.Join(wd, path)
+	fmt.Println("wd:", wd)
+	fmt.Println("path:", path)
+	fmt.Println("folder:", folder)
+
 	err = filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println(err)
@@ -196,32 +229,49 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	fmt.Printf("fileList:%d\n", len(fileList))
+
 	for percent := 100; percent >= 100; percent -= 10 { //TODO matching proportion
 		min_percent_matched = percent
-		fmt.Println("")
-		fmt.Printf("Min Percent Matching Required = %d%%\n", min_percent_matched)
-		fmt.Println("====================================================================")
-		fmt.Println("")
-		var randomFileList []string
+		fmt.Println("Households, ASR, Standard Error")
+		for selectedNum := 80; selectedNum <= 80; selectedNum += 5 {
+			maxHouseholdsNumber = selectedNum
+			var standard_error = 0.0
+			var std = 0.0
+			var mean = 0.0
+			house_sample = []float64{}
+			for loop_count := 0; loop_count < max_attackLoop; loop_count++ {
+				var randomFileList []string
+				if maxHouseholdsNumber == 80 {
+					randomFileList = fileList
+				} else {
+					tmpHouseIDs := make([]int, maxHouseholdsNumber)
+					for i := 0; i < maxHouseholdsNumber; i++ {
+						tmpHouseIDs[i] = i
+					}
 
-		if maxHouseholdsNumber == 80 {
-			randomFileList = fileList
-		} else {
-			// randomly select maxHouseholdsNumber households
-			tmpHouseIDs := make([]int, maxHouseholdsNumber)
-			for i := 0; i < maxHouseholdsNumber; i++ {
-				tmpHouseIDs[i] = i
+					randomFileList = []string{}
+					for index := 0; index < maxHouseholdsNumber; index++ {
+						r := getRandom(maxHouseholdsNumber - index)
+						randomFileList = append(randomFileList, fileList[tmpHouseIDs[r]])
+						tmpHouseIDs[r] = tmpHouseIDs[maxHouseholdsNumber-1-index]
+					}
+				}
+				process(randomFileList, params)
+				std, mean = calculateStandardDeviation(house_sample)
+				standard_error = std / math.Sqrt(float64(len(house_sample)))
+				if standard_error <= 0.01 && loop_count >= 100 {
+					loop_count++
+					break
+				}
 			}
-
-			randomFileList = []string{}
-			for index := 0; index < maxHouseholdsNumber; index++ {
-				r := getRandom(maxHouseholdsNumber - index)
-				randomFileList = append(randomFileList, fileList[tmpHouseIDs[r]])
-				tmpHouseIDs[r] = tmpHouseIDs[maxHouseholdsNumber-1-index]
-			}
+			fmt.Printf("Number of households: %d, mean ASR: %.3f, standard error: %.3f\n", maxHouseholdsNumber, mean, standard_error)
 		}
-		process(randomFileList, params)
 	}
+
+	elapsedSeconds := elapsedTime.Seconds() / float64(max_attackLoop)
+	fmt.Printf("asr_enxteded encryption time: %.2f seconds\n", elapsedSeconds)
+
 	fmt.Printf("Main() Done in %s \n", time.Since(start))
 }
 
@@ -229,12 +279,14 @@ func main() {
 func process(fileList []string, params ckks.Parameters) {
 	P := genparties(params, fileList)
 	_, _, _, _, _, entropySum, transitionSum := genInputs(P)
-	encryptedSectionNum = sectionNum
+	//e.g., sectionNum=10, encryptionRatio=20, encryptedSectionNum = 2
+	encryptedSectionNum = sectionNum * encryptionRatio / 100
+
 	var entropyReduction float64
 	var transitionReduction float64
 
+	startTime := time.Now()
 	for en := 0; en <= encryptedSectionNum; en++ {
-		fmt.Printf("------------------------------------------encryptedSectionNum = %d\n", en)
 		if currentStrategy == STRATEGY_GLOBAL {
 			_, entropyReduction, transitionReduction = markEncryptedSectionsByGlobal(en, P, entropySum, transitionSum)
 		} else if currentStrategy == STRATEGY_HOUSEHOLD {
@@ -245,36 +297,32 @@ func process(fileList []string, params ckks.Parameters) {
 		entropySum -= entropyReduction
 		transitionSum -= transitionReduction
 
-		fmt.Printf("<<<beginning---encryptedSectionNum = [%d]\n", en)
-		if en%2 == 0 && en != encryptedSectionNum {
-			memberIdentificationAttack(P)               //under current partial encryption
-			usedRandomStartPartyPairs = map[int][]int{} //clear map for the next loop
-		}
+		// if en == 6 {
+		// 	memberIdentificationAttack(P) //under current partial encryption
+		// }
+		usedRandomStartPartyPairs = map[int][]int{} //clear map for the next loop
 	}
+	elapsedTime += time.Since(startTime)
 }
 
-func memberIdentificationAttack(P []*party) {
-	for size := 3; size <= 48; size += 3 { //TODO:atd size
-		atdSize = size
-		var attackSuccessNum int
-		var attackCount int
-		var sample = []float64{}
-		var std float64
-		var standard_error float64
-		for attackCount = 0; attackCount < max_attackLoop; attackCount++ {
-			var successNum = attackParties(P)
-			attackSuccessNum += successNum
-			sample = append(sample, float64(successNum))
-			std = calculateStandardDeviation(sample)
-			standard_error = std / math.Sqrt(float64(len(sample)))
-			if standard_error <= 0.01 && attackCount >= 100 {
-				attackCount++
-				break
-			}
+func memberIdentificationAttack(P []*party) { //TODO:atd size
+	var attackSuccessNum int
+	var attackCount int
+	var sample = []float64{}
+	var std float64
+	var standard_error float64
+	for attackCount = 0; attackCount < max_attackLoop; attackCount++ {
+		var successNum = attackParties(P)
+		attackSuccessNum += successNum
+		sample = append(sample, float64(successNum))
+		std, _ = calculateStandardDeviation(sample)
+		standard_error = std / math.Sqrt(float64(len(sample)))
+		if standard_error <= 0.01 && attackCount >= 100 {
+			attackCount++
+			break
 		}
-		fmt.Printf("atdSize = %d, ASR = %.3f, Standard Error: %.3f\n", atdSize, float64(attackSuccessNum)/float64(attackCount), standard_error)
 	}
-
+	house_sample = append(house_sample, float64(attackSuccessNum)/float64(attackCount))
 }
 
 func attackParties(P []*party) (attackSuccessNum int) {
@@ -305,7 +353,6 @@ func attackParties(P []*party) (attackSuccessNum int) {
 	if len(matched_households) == 1 && matched_households[0] == randomParty {
 		attackSuccessNum++
 	}
-
 	return
 }
 
@@ -486,8 +533,6 @@ func markEncryptedSectionsByRandom(en int, P []*party, entropySum, transitionSum
 		} // mark randomly
 	}
 
-	fmt.Printf("threshold = %.1f, entropy/transition remain = %.3f,%.3f\n", float64(en)/float64(encryptedSectionNum), entropySum-entropyReduction, (transitionSum-transitionReduction)/1000.0)
-
 	//for each threshold, prepare plainInput&input, and encryptedInput
 
 	for pi, po := range P {
@@ -545,8 +590,6 @@ func markEncryptedSectionsByGlobal(en int, P []*party, entropySum, transitionSum
 		}
 	}
 
-	fmt.Printf("threshold = %.1f, entropy/transition remain = %.3f,%.3f\n", float64(en)/float64(encryptedSectionNum), entropySum-entropyReduction, (transitionSum-transitionReduction)/1000.0)
-
 	//for each threshold, prepare plainInput&input, and encryptedInput
 	for pi, po := range P {
 		po.input = make([][]float64, 0)
@@ -598,8 +641,6 @@ func markEncryptedSectionsByHousehold(en int, P []*party, entropySum, transition
 			transitionReduction += po.transition[index]
 		} // mark one block for each person
 	}
-
-	fmt.Printf("threshold = %.1f, entropy/transition remain = %.3f,%.3f\n", float64(en)/float64(encryptedSectionNum), entropySum-entropyReduction, (transitionSum-transitionReduction)/1000.0)
 
 	//for each threshold, prepare plainInput&input, and encryptedInput
 	for pi, po := range P {
@@ -674,7 +715,7 @@ func getRandom(numberRange int) (randNumber int) {
 }
 
 // generate inputs of parties
-func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, min, max, entropySum float64, transitionSum float64) {
+func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, min, max, entropySum, transitionSum float64) {
 
 	sectionNum = 0
 	min = math.MaxFloat64
@@ -741,6 +782,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 		entropyMap[k] = -possibility * math.Log2(possibility)
 	}
 
+	//max,min based on currentTarget
 	for _, po := range P {
 		for i := range po.rawInput {
 			singleRecordEntropy := entropyMap[po.rawInput[i]] / float64(frequencyMap[po.rawInput[i]])
@@ -753,7 +795,6 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 		}
 	}
 
-	//max,min based on currentTarget
 	for _, po := range P {
 		var targetArr []float64
 		if currentTarget == 1 {
@@ -774,7 +815,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 	return
 }
 
-func calculateStandardDeviation(numbers []float64) float64 {
+func calculateStandardDeviation(numbers []float64) (float64, float64) {
 	var sum float64
 	for _, num := range numbers {
 		sum += num
@@ -791,5 +832,5 @@ func calculateStandardDeviation(numbers []float64) float64 {
 
 	standardDeviation := math.Sqrt(variance)
 
-	return standardDeviation
+	return standardDeviation, mean
 }
