@@ -1,14 +1,8 @@
-# Repo Introduction
+# Introduction
 
 This is the code for protecting privacy using single-party and multi-party homomorphic encryption via Lattigo Library.
 
-### Setup
-
-You can setup the repo using below commands:
-
+### Testing performance among different block size choices
 ```bash
-$ go mod init lattigo
-$ go mod tidy
+$ go run .\blocksize_choices\test_blocks.go
 
-## Running the code
-$ go run .\1blocksize\single_blocks.go
