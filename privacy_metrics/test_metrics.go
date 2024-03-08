@@ -154,7 +154,6 @@ func main() {
 	} else {
 		fmt.Println("Target: Transition based")
 	}
-	// fmt.Println("SE threshold ", 0.01)
 	fmt.Println("Performance Loop: ", PERFORMANCE_LOOPS)
 	fmt.Println("Number of Households: ", maxHouseholdsNumber)
 
@@ -752,16 +751,11 @@ func genparties(params ckks.Parameters, fileList []string) []*party {
 
 //file reading
 func ReadCSV(path string) []string {
-	// fmt.Println("reading without buffer:")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Println("data:", string(data))
 	dArray := strings.Split(string(data), "\n")
-	// fmt.Println("original CSV size:", len(dArray))
-	// dArray2 := dArray[1 : len(dArray)-1]
-	// fmt.Println("data CSV size:", len(dArray)) //[0]..[241919]
 	return dArray[:len(dArray)-1]
 }
 
