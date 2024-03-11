@@ -11,12 +11,13 @@ The code is running on Windows platform, and not tested on Linux or Mac.
 $ go run .\blocksize_choices\test_blocks.go
 ```
 
-### Testing privacy metrics like entropy, transition
+### Testing privacy metrics based on entropy or transition
 ```bash
 $ go run .\privacy_metrics\test_metrics.go
 ```
 
-### Testing attack success rate
+### Testing attack success rate based on entropy or transition
 ```bash
-$ go run .\asr\test_asr.go
+$ go run .\asr\test_asr.go 1 2 0 1 60 80
 ```
+Params meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
