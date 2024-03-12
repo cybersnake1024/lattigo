@@ -27,4 +27,4 @@ $ go run .\privacy_metrics\test_metrics.go
 ```bash
 $ go run .\asr\test_asr.go 1 2 0 1 60 80
 ```
-Params meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
+Parameters meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
